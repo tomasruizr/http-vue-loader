@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script src="https://unpkg.com/vue"></script>
+    <script src="httpVueLoader.js"></script>
+  </head>
+
+  <body>
+    <div id="my-app">
+      <my-component></my-component>
+    </div>
+
+    <script type="text/javascript">
+      cache = [];
+      httpVueLoader.register(Vue, 'my-component')
+      // httpVueLoader.register(Vue, 'othercomponent')
+      
+      new Vue({
+        el: '#my-app',
+        // components: {
+        //   // 'my-component'
+        //   'my-component': httpVueLoader('my-component.vue')
+        // }
+      });
+    </script>
+  </body>
+</html>
