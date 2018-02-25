@@ -165,12 +165,14 @@
 
 			var childModuleRequire = function(childURL) {
 
-				return httpVueLoader.require(resolveURL(this.component.baseURI, childURL));
+				return httpVueLoader.require(childURL);
+				// return httpVueLoader.require(resolveURL(this.component.baseURI, childURL));
 			}.bind(this);
 
 			var childLoader = function(childURL, childName) {
 
-				return httpVueLoader(resolveURL(this.component.baseURI, childURL), childName);
+				return httpVueLoader(childURL, childName);
+				// return httpVueLoader(resolveURL(this.component.baseURI, childURL), childName);
 			}.bind(this);
 
 			try {
@@ -365,64 +367,24 @@
 		return value;
 	}
 
-	function parseComponentURL(url) {
-
-		var comp = url.match(/(.*?)([^/]+?)\/?(\.vue)?(\?.*|#.*|$)/);
-		return {
-			name: comp[2],
-			// MODIFICADO POR TOMAS RUIZ
-			url: comp[2],
-			// url: comp[1] + comp[2] + (comp[3] === undefined ? '/index.vue' : comp[3]) + comp[4]
-		};
-	}
-
-	function resolveURL(baseURL, url) {
-		console.log('llame al resolveURL');
-		if (url.substr(0, 2) === './' || url.substr(0, 3) === '../') {
-			return baseURL + url;
-		}
-		return url;
-	}
+	// function resolveURL(baseURL, url) {
+	// 	console.log('llame al resolveURL');
+	// 	if (url.substr(0, 2) === './' || url.substr(0, 3) === '../') {
+	// 		return baseURL + url;
+	// 	}
+	// 	return url;
+	// }
 
 	//*******************************************
 	// httpVueLoader invokers
 	//*******************************************
 	
 	function httpVueLoader(url, name) {
-		var comp = parseComponentURL(url)
-		return httpVueLoader.load(comp.url, name)
+		return httpVueLoader.load(url, name)
 	}
 
 	httpVueLoader.register = function(Vue, url, compText) {
-
-		var comp = parseComponentURL(url);
-		Vue.component(comp.name, httpVueLoader.load(comp.url, '', compText));
-	};
-
-	httpVueLoader.install = function(Vue) {
-
-		Vue.mixin({
-
-			beforeCreate: function() {
-
-				var components = this.$options.components;
-
-				for (var componentName in components) {
-
-					if (typeof(components[componentName]) === 'string' && components[componentName].substr(0, 4) === 'url:') {
-
-						var comp = parseComponentURL(components[componentName].substr(4));
-
-						var componentURL = ('_baseURI' in this.$options) ? resolveURL(this.$options._baseURI, comp.url) : comp.url;
-
-						if (isNaN(componentName))
-							components[componentName] = httpVueLoader.load(componentURL, componentName);
-						else
-							components[componentName] = Vue.component(comp.name, httpVueLoader.load(componentURL, comp.name));
-					}
-				}
-			}
-		});
+		Vue.component(url, httpVueLoader.load(url, '', compText));
 	};
 
 	
