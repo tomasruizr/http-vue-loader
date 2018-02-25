@@ -8,7 +8,23 @@
 })(this, function factory() {
 	'use strict';
 
+	//*******************************************
+	// On load
+	//*******************************************
+
 	var scopeIndex = 0;
+
+	if (socket) {
+		socket.on('reloadComponent', (name, component) => {
+			updateCache(name, component);
+			httpVueLoader.register(Vue, name);
+			console.log('cache updated');
+		})
+	}
+
+	//*******************************************
+	// Prototypes
+	//*******************************************
 
 	StyleContext.prototype = {
 
@@ -220,8 +236,6 @@
 		this.elt = elt;
 	}
 
-
-
 	Component.prototype = {
 
 		getHead: function() {
@@ -244,7 +258,7 @@
 			let promise;
 			if (compText)
 				promise = Promise.resolve(compText);
-			else 
+			else
 				promise = httpVueLoader.httpRequest(componentURL);
 			return promise
 				.then(function(responseText) {
@@ -363,50 +377,20 @@
 	}
 
 	function resolveURL(baseURL, url) {
-
+		console.log('llame al resolveURL');
 		if (url.substr(0, 2) === './' || url.substr(0, 3) === '../') {
 			return baseURL + url;
 		}
 		return url;
 	}
 
-
-	httpVueLoader.load = function(url, name, responseText) {
-
-		return function() {
-
-			// if (Vue.options.components[url])
-			// 	return Promise.resolve(true);
-			
-			return new Component(name).load(url, responseText)
-				.then(function(component) {
-
-					return component.normalize();
-				})
-				.then(function(component) {
-
-					return component.compile();
-				})
-				.then(function(component) {
-
-					var exports = component.script !== null ? component.script.module.exports : {};
-
-					if (component.template !== null)
-						exports.template = component.template.getContent();
-
-					if (exports.name === undefined)
-						if (component.name !== undefined)
-							exports.name = component.name;
-
-					exports._baseURI = component.baseURI;
-
-					return exports;
-				});
-		};
-	};
-
-	httpVueLoader.resolveDependencies = (components) => {
-		
+	//*******************************************
+	// httpVueLoader invokers
+	//*******************************************
+	
+	function httpVueLoader(url, name) {
+		var comp = parseComponentURL(url)
+		return httpVueLoader.load(comp.url, name)
 	}
 
 	httpVueLoader.register = function(Vue, url, compText) {
@@ -441,6 +425,42 @@
 		});
 	};
 
+	
+	httpVueLoader.load = function(url, name, responseText) {
+
+		return function() {
+
+			return new Component(name).load(url, responseText)
+				.then(function(component) {
+
+					return component.normalize();
+				})
+				.then(function(component) {
+
+					return component.compile();
+				})
+				.then(function(component) {
+
+					var exports = component.script !== null ? component.script.module.exports : {};
+
+					if (component.template !== null)
+						exports.template = component.template.getContent();
+
+					if (exports.name === undefined)
+						if (component.name !== undefined)
+							exports.name = component.name;
+
+					exports._baseURI = component.baseURI;
+
+					return exports;
+				});
+		};
+	};
+
+	httpVueLoader.resolveDependencies = (components) => {
+
+	}
+
 	httpVueLoader.require = function(moduleName) {
 
 		return window[moduleName];
@@ -449,9 +469,15 @@
 	httpVueLoader.httpRequest = function(url) {
 		let self = this;
 		return new Promise(function(resolve, reject) {
-
+			let cache = getCacheValue('compCache') || {}
+			if (cache[url]) {
+				console.log('aqui agarro el cache', url)
+				resolve(processComponentText(url, getCacheValue('compCache'), self, true));
+				return;
+			}
 			var xhr = new XMLHttpRequest();
 			// Aqui en vez de llamar a la url, se va a llamar al api que importa los componentes, con la lista actual de componentes como parametro Vue.options.components.
+			console.log('estoy llamando el xhr');
 			xhr.open('GET', '/components?name=' + url + '&current=' + JSON.stringify(Object.keys(Vue.options.components)));
 
 			xhr.onreadystatechange = function() {
@@ -459,20 +485,14 @@
 				if (xhr.readyState === 4) {
 					if (xhr.status >= 200 && xhr.status < 300) {
 						let response = JSON.parse(xhr.responseText)
-						for (var i = Object.keys(response).length - 1; i >= 0; i--) {
-							cache.push(response[Object.keys(response)[i]].id)
-							if (Object.keys(response)[i] !== url){
-								// Async load dependencies
-								self.register(Vue, Object.keys(response)[i], response[Object.keys(response)[i]].component)
-							}
-						}
-						resolve(response[url].component);
+						resolve(processComponentText(url, response, self))
 					} else
 						reject(xhr.status);
 				}
 			};
 
 			xhr.send(null);
+
 		});
 	};
 
@@ -482,10 +502,53 @@
 		css: identity
 	};
 
-	function httpVueLoader(url, name) {
-		var comp = parseComponentURL(url)
-		return httpVueLoader.load(comp.url, name)
+	//**************************************************************************************************
+	// other functions
+	//**************************************************************************************************
+
+	function processComponentText(url, response, loader, isCache) {
+		for (var i = Object.keys(response).length - 1; i >= 0; i--) {
+			if (!isCache) {
+				updateCache(Object.keys(response)[i], response[Object.keys(response)[i]])
+			}
+			if (Object.keys(response)[i] !== url) {
+				// Async load dependencies
+				loader.register(Vue, Object.keys(response)[i], response[Object.keys(response)[i]].component)
+			}
+		}
+		return response[url].component;
 	}
 
+	function updateCache(name, component){
+		setArrayCacheValue('compCacheId', component.id)
+		setObjectCacheValue('compCache', name, component)
+		setObjectCacheValue('compHashCache', component.id, name)
+	}
+
+	function setArrayCacheValue(name, value, append = true) {
+		let arr = getCacheValue(name) || [];
+		if (append && arr.indexOf(value) <= -1)
+			arr.push(value)
+		else
+			arr = [value]
+		localStorage.setItem(name, JSON.stringify(arr));
+	}
+
+	function setObjectCacheValue(name, key, value, append = true) {
+		let obj = getCacheValue(name) || {};
+		if (!!obj[name]) return;
+		if (append)
+			obj[key] = value
+		else {
+			obj = {}
+			obj[key] = value
+		}
+		localStorage.setItem(name, JSON.stringify(obj));
+	}
+
+	function getCacheValue(name) {
+		if (localStorage && localStorage[name])
+			return JSON.parse(localStorage[name])
+	}
 	return httpVueLoader;
 });
